@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button, Input, Spin } from 'antd'
 import { SendOutlined } from '@ant-design/icons'
+import { marked } from 'marked'
 import './App.css'
 
 const API_BASE = 'http://localhost:8000'
@@ -47,13 +48,16 @@ export default function App() {
         const chunk = decoder.decode(value)
         for (const line of chunk.split('\n')) {
           if (!line.startsWith('data: ')) continue
-          const data = line.slice(6).trim()
+          const data = line.slice(6)
           if (data === '[DONE]') break
           if (data) {
-            setMessages(prev => {
-              const last = prev[prev.length - 1]
-              return [...prev.slice(0, -1), { ...last, content: last.content + data }]
-            })
+            try {
+              const text = JSON.parse(data)
+              setMessages(prev => {
+                const last = prev[prev.length - 1]
+                return [...prev.slice(0, -1), { ...last, content: last.content + text }]
+              })
+            } catch { /* 跳过解析失败的 chunk */ }
           }
         }
       }
@@ -68,7 +72,7 @@ export default function App() {
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       send()
     }
@@ -88,7 +92,7 @@ export default function App() {
           <div key={i} className={`message-row ${msg.role}`}>
             <div className="message-bubble">
               {msg.content
-                ? msg.content
+                ? <div dangerouslySetInnerHTML={{ __html: marked(msg.content) as string }} />
                 : msg.role === 'assistant' && loading && i === messages.length - 1
                   ? <Spin size="small" />
                   : null}

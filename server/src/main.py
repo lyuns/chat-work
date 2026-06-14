@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from openai import OpenAI
 from typing import List
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -42,8 +43,8 @@ def generate(messages: List[Message]):
     for chunk in stream:
         delta = chunk.choices[0].delta.content
         if delta:
-            # SSE 格式：data: <内容>\n\n
-            yield f"data: {delta}\n\n"
+            # JSON 序列化保留换行符等特殊字符
+            yield f"data: {json.dumps(delta, ensure_ascii=False)}\n\n"
     yield "data: [DONE]\n\n"
 
 
