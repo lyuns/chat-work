@@ -1,0 +1,6 @@
+# client
+node_modules
+
+# server
+__pycache__
+venv
