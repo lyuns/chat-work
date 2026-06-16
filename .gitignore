@@ -4,3 +4,8 @@ node_modules
 # server
 __pycache__
 venv
+.env
+
+# cc
+docs/
+CLAUDE.md

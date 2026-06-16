@@ -1,16 +1,26 @@
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from openai import OpenAI
-from typing import List
-import os
-import json
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI()
+import models.user  # noqa: 触发模型注册，init_db 才能建表
+from core.database import init_db
+from core.redis import close_redis
+from apis.health import router as health_router
+from apis.auth import router as auth_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+    await close_redis()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,40 +29,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(
-    api_key=os.getenv("DEEPSEEK_API_KEY"),
-    base_url="https://api.deepseek.com",
-)
+app.include_router(health_router)
+app.include_router(auth_router)
 
+# AI 相关路由后续在此 include
 
-class Message(BaseModel):
-    role: str
-    content: str
-
-
-class ChatRequest(BaseModel):
-    messages: List[Message]
-
-
-def generate(messages: List[Message]):
-    stream = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[{"role": m.role, "content": m.content} for m in messages],
-        stream=True,
-    )
-    for chunk in stream:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            # JSON 序列化保留换行符等特殊字符
-            yield f"data: {json.dumps(delta, ensure_ascii=False)}\n\n"
-    yield "data: [DONE]\n\n"
-
-
-@app.post("/api/chat")
-async def chat(req: ChatRequest):
-    return StreamingResponse(generate(req.messages), media_type="text/event-stream")
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
